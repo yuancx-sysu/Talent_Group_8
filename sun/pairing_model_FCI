@@ -1,0 +1,112 @@
+    !2018.07.22
+    !TALENT2018_Group8
+    !authored by Sun XiaoDong
+    !"syev" is taken from Intel MKL
+    allocatable ham(:,:),nham1(:,:),nham2(:,:),mbasis(:)
+    character(1) jobz,uplo
+    allocatable w(:),work(:,:)
+    
+    num_pair=2
+    num_level=4
+    num_basis=nfac(num_level)/nfac(num_level-num_pair)/nfac(num_pair)
+    allocate(mbasis(num_basis))
+    allocate(ham(num_basis,num_basis),nham1(num_basis,num_basis),nham2(num_basis,num_basis))
+    allocate(w(num_basis),work(3*num_basis,3*num_basis))
+    call hamil(num_pair,num_level,num_basis,nham1,nham2)
+    jobz='V'
+    uplo='u'
+    do i=1,20
+        g=-1.+2./20.*i
+        ham=nham1-g/2.*nham2
+        lda=num_basis
+        lwork=3*num_basis
+        call ssyev(jobz,uplo,num_basis,ham,lda,w,work,lwork,info)
+        write(*,*)g,w(1)-2.+g!correction energy
+        
+        !write(*,*)info
+    enddo
+    stop
+    end
+    
+    subroutine hamil(num_pair,num_level,num_basis,nham1,nham2)
+    !construct pairing Hamiltonian matrix
+    !allocatable mbasis(:),nham1(:,:),nham2(:,:)
+    allocatable noccu(:,:)
+    !num_pair=2
+    !num_level=4
+    !num_basis=nfac(num_level)/nfac(num_level-num_pair)/nfac(num_pair)
+    !allocate(mbasis(num_basis),nham1(num_basis,num_basis),nham2(num_basis,num_basis))
+    dimension mbasis(num_basis),nham1(num_basis,num_basis),nham2(num_basis,num_basis)
+    allocate(noccu(num_basis,num_level))
+    call basis(num_pair,num_level,num_basis,mbasis)
+    !one body h_0 matrix element
+    nham1=0.
+    noccu=0
+    d=1.
+    do i=1,num_basis
+        ii=mbasis(i)
+        do j=1,num_pair
+            level=bit_size(ii)-leadz(ii)
+            nham1(i,i)=nham1(i,i)+(level-1)*2*d
+            ii=ii-2**(level-1)
+            noccu(i,level)=1
+        enddo
+    enddo
+    !two body pairing v matrix element
+    nham2=0.
+    do i=1,num_basis
+        do j=1,num_basis
+            ntmpt=0
+            do k=1,num_level
+                if (noccu(i,k)+noccu(j,k)==2) ntmpt=ntmpt+1
+            enddo
+            nham2(i,j)=ntmpt
+        enddo
+    enddo
+    !do i=1,num_basis
+    !    write(*,*)(nham1(i,j)-nham2(i,j),j=1,num_basis)
+    !enddo
+    end subroutine hamil
+    
+    subroutine basis(num_pair,num_level,num_basis,mbasis)
+    !build basis
+    dimension mbasis(num_basis)
+    !num_pair=3
+    !num_level=6
+    !num_basis=nfac(num_level)/nfac(num_level-num_pair)/nfac(num_pair)
+    ntmpt=0
+    max=0
+    do i=1,num_pair
+        max=max+2**(num_level-i)
+    enddo
+    !write(*,*)'num_basis',num_basis
+    k=1
+    do i=3,max
+        itmpt=i
+        !write(*,*)'i=',i
+        do j=1,num_pair
+            itmpt=itmpt-2**(bit_size(itmpt)-leadz(itmpt)-1)
+            if (itmpt==0.and.j<num_pair) goto 100
+            !write(*,*)'itmpt',j,itmpt
+        enddo
+        if (itmpt==0) then
+            mbasis(k)=i
+            k=k+1
+        endif
+100 continue        
+    enddo
+    !do i=1,num_basis
+    !    write(*,*)mbasis(i)
+    !enddo
+    return
+    end subroutine basis
+        
+    function nfac(n)
+    !Factorial integer
+    nfac=1
+    k=n
+    do i=1,n-1
+        nfac=nfac*k
+        k=k-1
+    enddo
+    end function nfac
